@@ -68,3 +68,7 @@ pnpm test
 ```
 
 原版界面、安全回归、迁移和手机实测见 [改造计划](docs/NATIVE_DSH_WEB_PLAN.md) 和 [R5 验收记录](docs/R5_TAILNET_REPORT.md)。旧版 SDK 工作台的命令见 [旧版工作台](docs/SDK_WORKBENCH.md)。
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE)。
