@@ -1,0 +1,5 @@
+# The official attachment store chmods its configured DSH Home. Give only
+# this module the writable tenant state root; the CLI/Loader home stays locked.
+- id: attachment-local
+  config:
+    dshHome: /tenant/dsh-home/state

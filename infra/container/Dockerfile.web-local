@@ -1,0 +1,27 @@
+FROM docker.io/library/node@sha256:ba6b7d0ee561d9d49deb99e2b93c98632cc287b6cca1a6b18d66127054efa4dc
+
+WORKDIR /opt/office-worker
+COPY --from=dsh_dependencies /node_modules ./node_modules
+COPY workers/office-native /opt/office-native
+COPY workers/dsh-web/bridge.mjs workers/dsh-web/readonly-root.mjs workers/dsh-web/office-files.mjs /opt/office-web/
+COPY workers/dsh-web/r1.patch.yml /opt/office-web/probe.patch.yml
+COPY workers/dsh-web/r2.patch.yml /opt/office-web/locked.patch.yml
+COPY workers/dsh-web/r3.patch.yml /opt/office-web/skills.patch.yml
+COPY workers/dsh-web/r5.patch.yml /opt/office-web/attachments.patch.yml
+
+RUN mkdir -p /opt/office-home /opt/office-invocation /opt/office-empty /office-skills \
+ && cd /opt/office-invocation \
+ && DSH_HOME=/opt/office-home DSH_TELEMETRY_DISABLED=1 node /opt/office-worker/node_modules/@deepseek-ai/dsh/lib/bin.js --profile web --dump-config >/dev/null \
+ && for name in sessions storages attachments spill; do ln -s /tenant/dsh-home/state/$name /opt/office-home/$name; done \
+ && ln -s /tmp/office-cache /opt/office-home/cache \
+ && printf '\n' >> /opt/office-web/skills.patch.yml \
+ && cat /opt/office-web/attachments.patch.yml >> /opt/office-web/skills.patch.yml \
+ && DSH_HOME=/opt/office-home DSH_TELEMETRY_DISABLED=1 node /opt/office-worker/node_modules/@deepseek-ai/dsh/lib/bin.js --profile web \
+      --patch /opt/office-web/probe.patch.yml --patch /opt/office-web/locked.patch.yml \
+      --patch /opt/office-web/skills.patch.yml --dump-config >/dev/null 2>/tmp/office-patch-warnings \
+ && { test ! -s /tmp/office-patch-warnings || { cat /tmp/office-patch-warnings; exit 1; }; } \
+ && rm /tmp/office-patch-warnings
+
+USER 1000:1000
+RUN node --check /opt/office-worker/node_modules/@deepseek-ai/dsh/lib/bin.js
+ENTRYPOINT ["node", "/opt/office-web/bridge.mjs", "--office-locked", "--office-skills"]

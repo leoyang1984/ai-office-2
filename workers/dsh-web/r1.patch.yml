@@ -1,0 +1,19 @@
+# R0 synthetic-instance overrides. Official frontend and backend packages are unchanged.
+- id: llm-deepseek
+  config:
+    apiKeyEnv: DEEPSEEK_API_KEY
+    reasoningEffort: off
+    maxTokens: 1024
+- id: session-title-llm
+  disabled: true
+- id: web-runtime
+  config:
+    openBrowser: false
+    printUrl: true
+    surfaceContext: false
+- id: workspace-controller
+  config:
+    documentsDirectory: /tenant/workspace
+- insert:
+    - id: office-native-controls
+      name: /opt/office-native/lib/index.js

@@ -1,0 +1,14 @@
+FROM ai-office-2-dsh-web:r2-0.2.2-rc.1
+USER root
+COPY workers/dsh-web/bridge.mjs /opt/office-web/bridge.mjs
+COPY workers/dsh-web/office-files.mjs /opt/office-web/office-files.mjs
+COPY workers/dsh-web/r3.patch.yml /opt/office-web/skills.patch.yml
+RUN mkdir /office-skills \
+ && cd /opt/office-invocation \
+ && DSH_HOME=/opt/office-home DSH_TELEMETRY_DISABLED=1 node /opt/office-worker/node_modules/@deepseek-ai/dsh/lib/bin.js --profile web \
+      --patch /opt/office-web/probe.patch.yml --patch /opt/office-web/locked.patch.yml \
+      --patch /opt/office-web/skills.patch.yml --dump-config >/dev/null 2>/tmp/office-patch-warnings \
+ && { test ! -s /tmp/office-patch-warnings || { cat /tmp/office-patch-warnings; exit 1; }; } \
+ && rm /tmp/office-patch-warnings
+USER 1000:1000
+ENTRYPOINT ["node", "/opt/office-web/bridge.mjs", "--office-locked", "--office-skills"]

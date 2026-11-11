@@ -1,0 +1,9 @@
+- id: skill-filesystem
+  disabled: false
+  config:
+    includeDefaultRoots: false
+    customSkillDirs: [/office-skills]
+    watch: false
+    watchFollowSymlinks: false
+- id: tool-skill
+  disabled: false

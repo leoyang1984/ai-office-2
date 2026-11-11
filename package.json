@@ -1,0 +1,31 @@
+{
+  "name": "ai-office-2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": "24.21.0"
+  },
+  "scripts": {
+    "setup:local": "sh scripts/setup-local.sh",
+    "start:local": "zsh scripts/start-local.zsh",
+    "build": "pnpm --filter @office/web build",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm build && vitest run tests/integration",
+    "maintenance": "node apps/api/src/maintenance.ts",
+    "bootstrap": "node apps/api/src/bootstrap.ts",
+    "start": "node apps/api/src/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "@types/ws": "8.18.1",
+    "playwright-core": "1.65.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.7",
+    "vitest": "5.1.0"
+  },
+  "dependencies": {
+    "ws": "8.21.3"
+  }
+}

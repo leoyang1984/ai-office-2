@@ -1,0 +1,6 @@
+FROM ai-office-2-dsh:p3-0.2.2-rc.1
+COPY workers/office-native /opt/office-native
+COPY workers/dsh-web/bridge.mjs /opt/office-web/bridge.mjs
+COPY workers/dsh-web/r1.patch.yml /opt/office-web/probe.patch.yml
+USER 1000:1000
+ENTRYPOINT ["node", "/opt/office-web/bridge.mjs"]

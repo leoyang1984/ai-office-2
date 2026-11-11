@@ -1,0 +1,18 @@
+FROM ai-office-2-dsh-web:r1-0.2.2-rc.1
+USER root
+COPY workers/dsh-web/bridge.mjs /opt/office-web/bridge.mjs
+COPY workers/dsh-web/readonly-root.mjs /opt/office-web/readonly-root.mjs
+COPY workers/dsh-web/office-files.mjs /opt/office-web/office-files.mjs
+COPY workers/dsh-web/r2.patch.yml /opt/office-web/locked.patch.yml
+# Provision the shipped profile at build time. The runtime root filesystem is read-only.
+RUN mkdir -p /opt/office-home /opt/office-invocation /opt/office-empty \
+ && cd /opt/office-invocation \
+ && DSH_HOME=/opt/office-home DSH_TELEMETRY_DISABLED=1 node /opt/office-worker/node_modules/@deepseek-ai/dsh/lib/bin.js --profile web --dump-config >/dev/null \
+ && for name in sessions storages attachments spill; do ln -s /tenant/dsh-home/state/$name /opt/office-home/$name; done \
+ && ln -s /tmp/office-cache /opt/office-home/cache \
+ && DSH_HOME=/opt/office-home DSH_TELEMETRY_DISABLED=1 node /opt/office-worker/node_modules/@deepseek-ai/dsh/lib/bin.js --profile web \
+      --patch /opt/office-web/probe.patch.yml --patch /opt/office-web/locked.patch.yml --dump-config >/dev/null 2>/tmp/office-patch-warnings \
+ && { test ! -s /tmp/office-patch-warnings || { cat /tmp/office-patch-warnings; exit 1; }; } \
+ && rm /tmp/office-patch-warnings
+USER 1000:1000
+ENTRYPOINT ["node", "/opt/office-web/bridge.mjs", "--office-locked"]

@@ -1,0 +1,4 @@
+ignoredOptionalDependencies:
+  - "@deepseek-ai/libreoffice-kit-darwin-arm64"
+  - "@deepseek-ai/libreoffice-kit-wasm"
+  - "sherpa-onnx-linux-arm64"

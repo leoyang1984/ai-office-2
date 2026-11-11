@@ -1,0 +1,12 @@
+FROM ai-office-2-dsh-web:r3-0.2.2-rc.1
+USER root
+COPY workers/dsh-web/r5.patch.yml /opt/office-web/attachments.patch.yml
+RUN printf '\n' >> /opt/office-web/skills.patch.yml \
+ && cat /opt/office-web/attachments.patch.yml >> /opt/office-web/skills.patch.yml \
+ && cd /opt/office-invocation \
+ && DSH_HOME=/opt/office-home DSH_TELEMETRY_DISABLED=1 node /opt/office-worker/node_modules/@deepseek-ai/dsh/lib/bin.js --profile web \
+      --patch /opt/office-web/probe.patch.yml --patch /opt/office-web/locked.patch.yml \
+      --patch /opt/office-web/skills.patch.yml --dump-config >/dev/null 2>/tmp/office-patch-warnings \
+ && { test ! -s /tmp/office-patch-warnings || { cat /tmp/office-patch-warnings; exit 1; }; } \
+ && rm /tmp/office-patch-warnings
+USER 1000:1000

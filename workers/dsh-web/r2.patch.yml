@@ -1,0 +1,84 @@
+# The Web preset is composed from a positive list. No shell, plugins, delegated
+# agents, workflow code, goals, scheduling, external fetch, or executable Skills.
+- id: preset-standard
+  config:
+    id: standard
+    order: 1
+    plugins:
+      - id: persona
+        name: '@deepseek-ai/dsh-persona'
+        config:
+          prefix: You are an office assistant powered by the {{model}} model.
+      - id: tool-fs
+        name: '@deepseek-ai/dsh-tool-fs'
+        config:
+          applyPatch: false
+      - id: present
+        name: '@deepseek-ai/dsh-tool-present'
+- id: hmr
+  disabled: true
+- id: client-hmr
+  disabled: true
+- id: plugin-manager
+  disabled: true
+- id: terminal-controller
+  disabled: true
+- id: cordis-host-runner
+  disabled: true
+- id: tool-executor-ptc
+  disabled: true
+- id: workflow-ptc
+  disabled: true
+- id: goal-round-driver
+  disabled: true
+- id: subagent-spawn-in-process
+  disabled: true
+- id: subagent-fork-in-process
+  disabled: true
+- id: llm-pi-ai
+  disabled: true
+- id: llm-deepseek-account
+  disabled: true
+- id: ui-settings-general
+  config:
+    welcomeNoticeVersion: '2026-09-28.1'
+- id: working-directory
+  config:
+    path: /tenant/workspace
+- id: sandbox-policy
+  config:
+    mode: workspace-write
+    workspaceRoot: /tenant/workspace
+- id: approval
+  config:
+    policy: never
+- id: permission
+  config:
+    presets:
+      workspace-write:
+        sandbox: workspace-write
+        approval: never
+- id: credentials
+  config:
+    path: /tmp/office-cache/.credentials.yaml
+    watch: false
+- id: preset-ptc
+  disabled: true
+- id: preset-cordis
+  disabled: true
+- id: preset-minimal
+  disabled: true
+- id: cordis-inspect-providers
+  disabled: true
+- id: fs-sandbox
+  disabled: true
+- insert:
+    - id: office-file-scope
+      name: /opt/office-web/office-files.mjs
+- id: ui-sidebar-terminal
+  disabled: true
+- id: ui-settings
+  config:
+    enabled: false
+- id: tool-working-directory
+  disabled: true
