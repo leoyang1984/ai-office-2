@@ -28,9 +28,10 @@ const origin = 'http://127.0.0.1:' + port;
 const initial = temporaryPassword(), password = temporaryPassword();
 const attack = '<h1>R2_PREVIEW_CONTENT</h1><script>document.body.setAttribute("data-r2-executed","yes");parent.document.body.setAttribute("data-r2-executed","yes")</script>'
   + '<img src="/missing-r2-image" onerror="document.body.setAttribute(\'data-r2-executed\',\'yes\')">';
-const model: ModelBroker = async body => {
+const model: ModelBroker = async (body, signal) => {
   const input = JSON.parse(body);
   const last = JSON.stringify(input.messages.at(-1));
+  if (last.includes('R2_FORCE_TIMEOUT')) await delay(45_000, undefined, { signal });
   let name: string | undefined, args: object | undefined;
   if (last.includes('tool_result')) {
     assert.ok(!last.includes('"is_error":true'), 'Preview tool failed');
@@ -57,7 +58,7 @@ try {
   const store = new Store(dataRoot);
   store.createUser({ username: 'preview-test', displayName: 'Preview test', passwordHash: await hashPassword(initial) }, 'USER');
   store.close();
-  app = await createApp({ dataRoot, origin, serveWeb: true, nativeWeb: { image, model, idleMs: 8000 } });
+  app = await createApp({ dataRoot, origin, serveWeb: true, nativeWeb: { image, model, idleMs: 8000, turnMs: 6000 } });
   await app.listen({ host: '127.0.0.1', port });
   browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true, chromiumSandbox: true });
   const page = await browser.newPage();
@@ -99,6 +100,16 @@ try {
   await page.getByRole('button', { name: '发送消息', exact: true }).click();
   await page.getByText('R2_RESUMED_HISTORY', { exact: true }).waitFor();
   console.log('PASS R2 idle browser does not respawn container; resume control restores and continues history');
+
+  stage = 'turn deadline in browser';
+  await composer.fill('R2_FORCE_TIMEOUT');
+  await page.getByRole('button', { name: '发送消息', exact: true }).click();
+  const timedOut = page.getByRole('button', { name: '本轮任务已超时 · 点击恢复 DSH', exact: true });
+  await timedOut.waitFor({ timeout: 15_000 });
+  await timedOut.click();
+  await history.click();
+  await page.getByText('R2_RESUMED_HISTORY', { exact: true }).waitFor();
+  console.log('PASS turn timeout is visible in the browser and recovery reopens history');
 } catch (error) {
   console.error(JSON.stringify({ stage, diagnostic: String(error).slice(0, 1500).replace(/token=[^\s"']+/g, 'token=[redacted]') }));
   process.exitCode = 1;

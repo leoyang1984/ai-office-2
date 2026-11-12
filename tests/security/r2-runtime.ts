@@ -27,6 +27,8 @@ const a = account('alice'), b = account('bob'), admin = account('admin');
 const quota = { bytes: 512 * 1024, entries: 160 };
 const grants: string[] = [];
 const modelHeld = new Set<string>(), modelAborted = new Set<string>();
+const modelBudget = 16;
+const budgetCalls = { LONG: 0, LIMIT: 0 };
 let calls = 0, attackStep = 0;
 let app: Awaited<ReturnType<typeof createApp>> | undefined;
 let origin: string;
@@ -60,6 +62,15 @@ const model: ModelBroker = async (body, signal) => {
     modelHeld.add(hold);
     await delay(45_000, undefined, { signal }).catch(() => { modelAborted.add(hold); });
     signal.throwIfAborted();
+  }
+  if (last.includes('R2_BUDGET_RESUME')) return say('R2_SAME_SESSION_RECOVERED');
+  for (const run of ['LONG', 'LIMIT'] as const) {
+    const marker = 'R2_BUDGET_' + run;
+    if (!last.includes(marker) && !(last.includes('tool_result') && messages.includes(marker))) continue;
+    const step = ++budgetCalls[run];
+    assert.doesNotMatch(last, /"is_error":true/);
+    if (run === 'LONG' && step === 13) return say('R2_LONG_COMPLETED');
+    return tool('write', { file_path: '/tenant/workspace/budget.txt', content: 'step ' + step });
   }
   const knowledge = '/knowledge/' + grants[0] + '/bait.txt';
   if (last.includes('R2_ATTACK')) return tool('read', { file_path: knowledge });
@@ -184,7 +195,7 @@ function container(user: typeof a) {
     }
   });
 }
-const runtime = { image, model, idleMs: 9000, turnMs: 7000, maxTurns: 1, storage: quota, onError: (error: unknown) => {
+const runtime = { image, model, idleMs: 9000, turnMs: 7000, maxModelCalls: modelBudget, maxTurns: 1, storage: quota, onError: (error: unknown) => {
   if (error instanceof OfficeError) return;
   diagnostics.push(String(error).replace(/token=[^\s"']+/g, 'token=[redacted]').slice(0, 400));
 } };
@@ -287,6 +298,22 @@ try {
   await saw(b, sidB, 'R2_PERSISTED');
   console.log('PASS R2 one whole turn per user, global cap, WS/steer bypass denied, cancellation releases slot');
 
+  stage = 'model budget and same-instance recovery';
+  const budgetSocket = await ws(a);
+  const longSession = await newSession(a), limitedSession = await newSession(a);
+  await send(a, longSession, 'R2_BUDGET_LONG');
+  await saw(a, longSession, 'R2_LONG_COMPLETED');
+  assert.equal(budgetCalls.LONG, 13);
+  await send(a, limitedSession, 'R2_BUDGET_LIMIT');
+  await saw(a, limitedSession, `本轮任务已达到 ${modelBudget} 次模型请求上限`);
+  assert.equal(budgetCalls.LIMIT, modelBudget);
+  assert.equal(budgetSocket.readyState, WebSocket.OPEN);
+  assert.equal(container(a), aName);
+  await send(a, limitedSession, 'R2_BUDGET_RESUME');
+  await saw(a, limitedSession, 'R2_SAME_SESSION_RECOVERED');
+  budgetSocket.close();
+  console.log('PASS native turns exceed 12 model requests; budget exhaustion preserves connection and same-session recovery');
+
   stage = 'revocation and history recovery';
   await send(a, sidA2, 'R2_HOLD_REVOKE');
   await waitFor(() => modelHeld.has('REVOKE'), 'revocation model');
@@ -327,7 +354,10 @@ try {
   await waitFor(() => modelHeld.has('TIMEOUT'), 'timeout turn started');
   const timed = container(a)!;
   await waitFor(() => modelAborted.has('TIMEOUT') && !instances().includes(timed), 'deadline removal', 12_000);
+  assert.deepEqual(await (await call(a, '/dsh/office/status')).json(), { available: false, reason: 'timeout' });
+  assert.notEqual((await (await call(b, '/dsh/office/status')).json()).reason, 'timeout');
   await open(a);
+  assert.deepEqual(await (await call(a, '/dsh/office/status')).json(), { available: true });
   const crashed = container(a)!;
   docker('kill', crashed);
   await waitFor(() => !instances().includes(crashed), 'crash cleanup');

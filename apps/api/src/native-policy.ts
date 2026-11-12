@@ -106,19 +106,23 @@ export function storageBootstrap(userId: string): string {
  if(window.indexedDB){const open=indexedDB.open.bind(indexedDB),del=indexedDB.deleteDatabase.bind(indexedDB);
   indexedDB.open=(n,v)=>v===undefined?open(prefix+n):open(prefix+n,v);indexedDB.deleteDatabase=n=>del(prefix+n);}
  let checking=false, resume;
- function showResume(){
-  if(resume?.isConnected||!document.body)return;
-  resume=document.createElement('button');
-  resume.type='button';resume.textContent='继续使用 DSH';
-  resume.title='会话已休眠或连接已断开，点击恢复';
-  resume.style.cssText='position:fixed;bottom:16px;right:16px;z-index:2147483647;padding:8px 14px;cursor:pointer';
-  resume.onclick=()=>location.reload();
-  document.body.append(resume);
+ function showResume(reason){
+  if(!document.body)return;
+  if(!resume?.isConnected){
+   resume=document.createElement('button');
+   resume.type='button';
+   resume.style.cssText='position:fixed;bottom:16px;right:16px;z-index:2147483647;padding:8px 14px;cursor:pointer';
+   resume.onclick=()=>location.reload();
+   document.body.append(resume);
+  }
+  const timedOut=reason==='timeout';
+  resume.textContent=timedOut?'本轮任务已超时 · 点击恢复 DSH':'继续使用 DSH';
+  resume.title=timedOut?'本轮任务已停止。恢复后可打开原会话继续。':'会话已休眠或连接已断开，点击恢复';
  }
  async function check(){if(checking)return;checking=true;try{const r=await fetch('/api/v1/auth/me',{cache:'no-store'});
   const u=r.ok?await r.json():null;if(!u||u.id!==owner||u.mustChangePassword){localStorage.clear();sessionStorage.clear();document.body?.replaceChildren();location.replace('/');return;}
   const status=await fetch('/dsh/office/status',{cache:'no-store'});
-  if(status.ok){if((await status.json()).available)resume?.remove();else showResume();}}
+  if(status.ok){const state=await status.json();if(state.available)resume?.remove();else showResume(state.reason);}}
   catch{}finally{checking=false;}}
  window.addEventListener('pagehide',()=>document.body?.replaceChildren());
  window.addEventListener('pageshow',e=>{if(e.persisted)location.reload()});

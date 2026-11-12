@@ -17,6 +17,7 @@ export interface NativeRuntime {
   onError?: (error: unknown) => void;
   idleMs?: number;
   turnMs?: number;
+  maxModelCalls?: number;
   maxTurns?: number;
   storage?: NativeStorageLimit;
   skills?: boolean;
@@ -41,9 +42,11 @@ type Response = { status: number; headers: IncomingMessage['headers']; bytes: Bu
 const unavailable = () => new OfficeError(503, 'NATIVE_UNAVAILABLE', 'DSH 正在恢复，请稍后重试');
 const modelTools = new Set(['read', 'read_image', 'write', 'edit', 'present']);
 const noCapacity = () => new OfficeError(429, 'NATIVE_TURN_LIMIT', '当前对话正在运行或名额已满，请稍后再试');
+const noticeMs = 5 * 60_000;
 
 export class NativePool {
   private entries = new Map<string, Entry>();
+  private recentTimeouts = new Map<string, number>();
   private timer?: ReturnType<typeof setInterval>;
   private initialized = false;
   private closing = false;
@@ -54,18 +57,20 @@ export class NativePool {
   private readonly disconnect: (userId: string) => void;
   private readonly idleMs: number;
   private readonly turnMs: number;
+  private readonly maxModelCalls: number;
   private readonly maxTurns: number;
   private readonly storage: NativeStorageLimit;
   constructor(store: Store, origin: URL, runtime: NativeRuntime, disconnect: (userId: string) => void) {
     this.store = store; this.origin = origin; this.runtime = runtime; this.disconnect = disconnect;
     this.scope = hashBytes(store.root);
     this.idleMs = runtime.idleMs ?? 5 * 60_000;
-    this.turnMs = runtime.turnMs ?? 120_000;
+    this.turnMs = runtime.turnMs ?? 10 * 60_000;
+    this.maxModelCalls = runtime.maxModelCalls ?? 64;
     this.maxTurns = runtime.maxTurns ?? 2;
     this.storage = runtime.storage ?? defaultNativeStorage;
   }
   async initialize(): Promise<void> {
-    for (const [value, maximum] of [[this.idleMs, 60 * 60_000], [this.turnMs, 120_000], [this.maxTurns, 2],
+    for (const [value, maximum] of [[this.idleMs, 60 * 60_000], [this.turnMs, 30 * 60_000], [this.maxModelCalls, 128], [this.maxTurns, 2],
       [this.storage.bytes, defaultNativeStorage.bytes], [this.storage.entries, defaultNativeStorage.entries]] as const) {
       if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) throw new Error('Invalid native runtime limit');
     }
@@ -80,6 +85,8 @@ export class NativePool {
     this.store.audit({ actorId: null, targetId: id, action: 'native.' + action, success, ip: 'local-runtime', requestId: randomUUID() });
   }
   private sweep(): void {
+    const now = performance.now();
+    for (const [userId, expires] of this.recentTimeouts) if (expires <= now) this.recentTimeouts.delete(userId);
     for (const entry of this.entries.values()) {
       if (entry.stopped) { this.retire(entry, entry.stopped); continue; }
       if (!entry.cookie) continue;
@@ -90,9 +97,10 @@ export class NativePool {
   private check(entry: Entry, reserve = 0, entries = 0): void {
     checkNativeStorage(entry.roots, this.storage, reserve, entries);
   }
-  available(userId: string): boolean {
+  status(userId: string) {
     const entry = this.entries.get(userId);
-    return Boolean(entry?.cookie && !entry.stopped && !this.closing);
+    const available = Boolean(entry?.cookie && !entry.stopped && !this.closing);
+    return { available, ...(!available && (this.recentTimeouts.get(userId) ?? 0) > performance.now() ? { reason: 'timeout' } : {}) };
   }
   touch(entry: Entry): void { entry.touched = performance.now(); }
   async get(userId: string, wake: boolean): Promise<Entry> {
@@ -128,6 +136,7 @@ export class NativePool {
           current.cookie = response.headers['set-cookie'].map(value => value.split(';')[0]).join('; ');
           this.check(current);
           this.touch(current);
+          this.recentTimeouts.delete(userId);
           this.audit(userId, 'started');
         } catch (error) {
           this.retire(current, 'failed');
@@ -145,13 +154,19 @@ export class NativePool {
   }
   private async model(entry: Entry, body: string, transportSignal: AbortSignal): Promise<globalThis.Response> {
     const turn = entry.turn;
-    if (!turn || turn.signal.aborted || entry.stopped || ++turn.calls > 12) throw new Error('Model request outside turn policy');
+    if (!turn || turn.signal.aborted || entry.stopped) throw new Error('Model request outside turn policy');
     const tools = JSON.parse(body).tools;
     if (tools !== undefined && (!Array.isArray(tools) || tools.some(tool => !modelTools.has(tool?.name) && !(this.runtime.skills && tool?.name === 'skill')))) {
       const names = Array.isArray(tools) ? tools.map(tool => /^[a-z0-9_-]{1,40}$/i.test(tool?.name ?? '') ? tool.name : '[unknown]') : [];
       throw new Error('Unexpected native tool capability: ' + names.join(','));
     }
     try { this.check(entry); } catch (error) { this.retire(entry, 'storage'); throw error; }
+    if (++turn.calls > this.maxModelCalls) {
+      if (turn.calls === this.maxModelCalls + 1) this.audit(entry.userId, 'model-budget-reached', false);
+      // A non-retryable provider error ends this turn without destroying the Web transport.
+      return Response.json({ type: 'error', error: { type: 'invalid_request_error',
+        message: `本轮任务已达到 ${this.maxModelCalls} 次模型请求上限。可在此会话发送下一条消息继续。` } }, { status: 400 });
+    }
     return this.runtime.model(body, AbortSignal.any([turn.signal, transportSignal]));
   }
   begin(entry: Entry, sessionId: string): Turn {
@@ -259,6 +274,7 @@ export class NativePool {
     if (entry.stopping) return entry.stopping;
     if (!entry.stopped) {
       entry.stopped = reason;
+      if (reason === 'timeout') this.recentTimeouts.set(entry.userId, performance.now() + noticeMs);
       if (entry.turn) { clearTimeout(entry.turn.timer); entry.turn.controller.abort(); }
       if (entry.cookie) this.disconnect(entry.userId);
       entry.agent.destroy();

@@ -10,6 +10,14 @@
 AI_OFFICE_DATA_ROOT="/absolute/path/to/office-data" AI_OFFICE_PORT=3089 pnpm start:local
 ```
 
+原版 DSH Web 每轮默认最多 64 次模型请求、总计 10 分钟。一次模型请求可以发起多个工具操作，工具操作数和模型请求数不同。达到请求上限会在当前对话中结束本轮，仍可在原会话继续；达到总时限会停止执行，页面提示恢复 DSH，已保存的历史和文件保留。每次模型请求仍有独立的 60 秒时限。只需修改轮次限制时，在 Mac 上重启服务即可：
+
+```sh
+AI_OFFICE_MAX_MODEL_CALLS=96 AI_OFFICE_TURN_SECONDS=900 pnpm start:local
+```
+
+模型请求上限可设为 1–128，轮次时限可设为 1–1800 秒。远程启动时同时保留原有的 `AI_OFFICE_ORIGIN`。这些设置仅适用于 `start:local` 的原版 DSH Web。
+
 启动时从当前终端获取 Key。前台服务以 Ctrl+C 停止。Docker Desktop 停止时，请先启动 Docker Desktop。镜像记录丢失或镜像被移除时，重新运行 `pnpm setup:local`。若首次引导中断且 SQLite 文件已创建，使用同一个数据目录运行 `pnpm bootstrap`。已存在管理员时，引导命令会拒绝再创建一位。
 
 备份前先停止服务。下面假定使用默认数据根，快照和恢复目录用自己的绝对路径，且目标目录尚不存在。
@@ -85,7 +93,9 @@ node tests/security/p4-failures.ts
 
 `p4-failures.ts` 仅对随机测试数据目录的容器注入故障，检查失败事件、容器清理、原有合成文件完整性及下一轮恢复。资源耗尽探针只写满容器的 64 MiB tmpfs，未执行宿主磁盘写满或整机内存耗尽测试。当前远程入口为临时前台会话，应用和 Serve 需同时保持运行；本轮未安装常驻服务。
 
-## 原版 Web 网关研发状态
+## 原版 Web 网关研发历史
+
+以下是各阶段的记录，当前正式启动方式以上文 `pnpm start:local` 为准。
 
 R1 已通过合成账户的原版界面登录、HTTP/WS 鉴权、连接撤销及下载按钮验收，见 [R1 报告](R1_NATIVE_GATEWAY_REPORT.md)。当前普通启动命令仍使用 SDK/Mock 分支，尚未发布原版网关，也未迁移真实数据。不要用 R1 测试脚本操作现有数据；正式运行、迁移与手机 HTTPS 按 R2–R5 的闸门推进。
 

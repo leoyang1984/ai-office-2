@@ -2,6 +2,13 @@ import { deepSeekBroker, verifyWorkerImage } from '../../../packages/dsh-adapter
 import { createApp } from './app.ts';
 import { readLocalWebImage } from './local-image.ts';
 
+function readLimit(name: string, max: number): number | undefined {
+  const value = process.env[name];
+  if (value === undefined) return;
+  if (!/^[1-9][0-9]*$/.test(value) || Number(value) > max) throw new Error(`${name} 必须是 1–${max} 的整数`);
+  return Number(value);
+}
+
 const stop = new AbortController();
 const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 const abort = () => stop.abort();
@@ -19,6 +26,8 @@ try {
   if (publicOrigin.origin !== origin || (origin !== loopback && publicOrigin.protocol !== 'https:')) {
     throw new Error('AI_OFFICE_ORIGIN 必须是本机 HTTP 入口或完整的 HTTPS origin');
   }
+  const turnSeconds = readLimit('AI_OFFICE_TURN_SECONDS', 1800);
+  const maxModelCalls = readLimit('AI_OFFICE_MAX_MODEL_CALLS', 128);
 
   const key = process.env.DEEPSEEK_API_KEY ?? '';
   delete process.env.DEEPSEEK_API_KEY;
@@ -30,7 +39,8 @@ try {
 
   app = await createApp({
     dataRoot, origin, serveWeb: true, sessionCookie: 'office_native_session',
-    nativeWeb: { image, skills: true, model: deepSeekBroker(key) },
+    nativeWeb: { image, skills: true, model: deepSeekBroker(key), maxModelCalls,
+      turnMs: turnSeconds === undefined ? undefined : turnSeconds * 1000 },
   });
   if (!stop.signal.aborted) {
     await app.listen({ host: '127.0.0.1', port });

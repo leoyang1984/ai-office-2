@@ -56,6 +56,8 @@ pnpm start:local
 
 只在 Mac 上使用时，可以直接打开上面的本机地址。要从手机或其他电脑访问，请按 [Tailscale 安装与 Serve 配置](docs/TAILSCALE.md) 操作。指南包括两台设备登录同一个 Tailnet、启用 HTTPS、启动和关闭 Serve。
 
+远端设备只负责打开网页，DSH 在 Mac 上的个人容器里运行。当前版本可以读写自己的工作区，不能运行 Shell 脚本、搜索网页或访问公网；AI Office 管理员同样遵守这些限制。参见 [托管 Bot 方案](docs/HOSTED_BOT.md)。
+
 ## 4. 更新与维护
 
 更新前停止工作台并备份数据。更新源码后运行 `pnpm setup:local`，再运行 `pnpm start:local`。自定义端口、数据目录、备份恢复和迁移见 [部署与维护](docs/DEPLOYMENT.md)。

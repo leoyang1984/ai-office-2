@@ -97,7 +97,7 @@ export class NativeGateway {
   try{
    if(url.pathname.startsWith('/dsh/office/')&&!['GET','HEAD'].includes(req.method))throw forbidden();
    if(url.pathname==='/dsh/office/bootstrap.js')return reply.type('text/javascript').send(storageBootstrap(lease.userId));
-   if(url.pathname==='/dsh/office/status')return reply.send({available:this.pool.available(lease.userId)});
+   if(url.pathname==='/dsh/office/status')return reply.send(this.pool.status(lease.userId));
    if(url.pathname==='/dsh/office/download')return await this.download(url,lease,abort.signal,reply);
    const bytes=Buffer.isBuffer(req.body)?req.body:Buffer.alloc(0);
    const op=authorizeNative(req.method,url,bytes);
